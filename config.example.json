@@ -1,0 +1,10 @@
+{
+  "domains": {
+    "example.com": {
+      "AliAccessKeyId": "xxxx",
+      "AliAccessKeySecret": "xxxx",
+      "CDN_DOMAINS": ["example.com", "a.example.com"],
+      "DCDN_DOMAINS": ["b.example.com", "c.example.com"]
+    }
+  }
+}

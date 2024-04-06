@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "sslcert"
+version = "0.1.0"
+description = ""
+authors = ["narumi <yan.jianhui147@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+alibabacloud-dcdn20180115 = "2.2.1"
+alibabacloud-cdn20180510 = "3.3.0"
+pydantic-settings = "^2.2.1"
+alibabacloud-cas20200407 = "1.2.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
