@@ -12,6 +12,8 @@
 - `CERT_FULLCHAIN_PATH`
 - `Le_Domain`
 
+运行`source ./export_env.sh example.com`可以快捷设置以上环境变量。
+
 ## config.json
 
 可以设置多组域名的 AccessKey 和要更新的 CDN 和 DCDN(全站加速)域名，运行时只更新`Le_Domain`这一组的证书。
@@ -36,10 +38,18 @@
 运行`acme.sh`签署新证书并设置 renew hook
 
 ```bash
-acme.sh --issue --dns dns_ali -d example.com -d "*.example.com" --renew-hook /path/to/update_ssl_cert.sh
+acme.sh --issue --dns dns_ali -d example.com -d '*.example.com' --renew-hook /path/to/update_ssl_cert.sh
 ```
 
-## Aliyun 建立 RAM 用户并授权
+注意给`*.example.com` 添加单引号，否则 shell 可能对其展开。
+
+若需使用多级域名，如四级域名，可添加其三级域名的泛域名:
+
+```bash
+acme.sh --issue --dns dns_ali -d example.com -d '*.example.com' -d '*.sub.example.com' --renew-hook /path/to/update_ssl_cert.sh
+```
+
+## Aliyun 权限管理
 
 新建一个 OpenAPI 调用权限的 RAM 用户，添加以下权限:
 
