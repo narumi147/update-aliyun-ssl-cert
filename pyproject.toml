@@ -6,11 +6,11 @@ authors = ["narumi <yan.jianhui147@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
-alibabacloud-dcdn20180115 = "2.2.1"
-alibabacloud-cdn20180510 = "3.3.0"
-pydantic-settings = "^2.2.1"
-alibabacloud-cas20200407 = "1.2.0"
+python = "^3.12"
+alibabacloud-dcdn20180115 = "3.1.0"
+alibabacloud-cdn20180510 = "9.2.0"
+pydantic-settings = "^2.15.0"
+alibabacloud-cas20200407 = "3.9.3"
 
 
 [build-system]

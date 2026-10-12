@@ -1,8 +1,8 @@
 import functools
 import json
 
+from Tea.model import TeaModel
 from alibabacloud_cas20200407 import models as cas_models
-from alibabacloud_tea_openapi import models as open_api_models
 
 from .logger import logger
 
@@ -24,7 +24,7 @@ def validate_tea_resp(response):
         raise
 
 
-def _try_dump_tea_model(model: open_api_models.TeaModel):
+def _try_dump_tea_model(model: TeaModel):
     if model is None:
         return str(model)
     try:

@@ -2,6 +2,22 @@
 
 使用 [acme.sh](https://github.com/acmesh-official/acme.sh) 签发通配符域名(`example.com`,`*.example.com`)，并通过本脚本上传至阿里云服务器
 
+## Python 环境
+
+使用 Python 3.12 创建项目虚拟环境并安装锁定依赖：
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+依赖由 `pyproject.toml` 和 `poetry.lock` 管理。更新依赖后重新导出安装清单：
+
+```bash
+poetry export --without-hashes -f requirements.txt -o requirements.txt
+```
+
 ## Env
 
 以下环境变量由`acme.sh`自动设置，若需手动运行脚本，可手动设置环境变量后运行。(也可在`config.json`中设置)
