@@ -1,5 +1,5 @@
 """
-通过acme.sh签发通配符域名的SSL证书并设置改脚本为renew hook
+通过acme.sh签发证书并使用deploy hook调用本脚本
 上传证书至阿里云->替换CDN或DCDN的证书->删除旧证书
 
 Usage: python main.py --config path/to/config.json --delete-old-cert
@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from sslcert.ali_api import AliApi
+from sslcert.cleanup import cleanup_old_certificates
 from sslcert.logger import logger
 from sslcert.settings import Config, settings
 
@@ -23,7 +24,7 @@ def main(config_fp: Path, delete_old_cert: bool):
 
     domain_config = config.domains.get(Le_Domain) if Le_Domain else None
     if domain_config is None:
-        raise Exception(f"config not found for domain {Le_Domain}")
+        raise ValueError(f"config not found for domain {Le_Domain}")
 
     assert (
         domain_config.AliAccessKeyId
@@ -40,12 +41,11 @@ def main(config_fp: Path, delete_old_cert: bool):
 
     ali_api = AliApi(domain_config.AliAccessKeyId, domain_config.AliAccessKeySecret)
 
-    # get existing cert list with matching domain name
-    cert_list = [cert for cert in ali_api.list_cert() if cert.common_name == Le_Domain]
-
     # create cert
     cert_name = (
-        Le_Domain.replace(".", "_") + "-" + datetime.now().strftime("%Y%m%d-%H%M%S")
+        Le_Domain.replace(".", "_")
+        + "-"
+        + datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
     )
 
     cert_fullchain = Path(CERT_FULLCHAIN_PATH).read_text()
@@ -69,18 +69,13 @@ def main(config_fp: Path, delete_old_cert: bool):
         ali_api.set_dcdn_cert(domain_name=domain, cert_id=cert_id, cert_name=cert_name)
         logger.info(f'Set DCDN cert for "{domain}": {cert_id} {cert_name}')
 
-    # deleted unused cert
     if delete_old_cert:
-        cert_to_delete = [
-            cert
-            for cert in cert_list
-            if cert.common_name == Le_Domain and cert.certificate_id != cert_id
-        ]
-        if cert_to_delete:
-            del_cert_id = cert_to_delete[0].certificate_id
-            assert del_cert_id
-            ali_api.delete_cert(del_cert_id)
-            logger.warning(f"Deleted cert {del_cert_id}: {cert_to_delete[0].to_map()}")
+        try:
+            cleanup_old_certificates(ali_api, Le_Domain, cert_id)
+        except Exception as error:  # noqa: BLE001 - Cleanup is explicitly best-effort.
+            logger.warning(
+                f"Certificate cleanup failed after successful deployment: {error}"
+            )
 
 
 if __name__ == "__main__":

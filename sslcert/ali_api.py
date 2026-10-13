@@ -34,14 +34,47 @@ class AliApi:
         config.endpoint = "cas.aliyuncs.com"
         client = casClient(config)
 
-        request = cas_models.ListUserCertificateOrderRequest(
-            order_type="UPLOAD", current_page=1, show_size=100
+        certificates = {}
+        # An empty Status returns valid certificates only; query expired ones too.
+        for status in (None, "EXPIRED"):
+            page = 1
+            seen_ids = set()
+            while True:
+                request = cas_models.ListUserCertificateOrderRequest(
+                    order_type="UPLOAD", status=status, current_page=page, show_size=100
+                )
+                response = client.list_user_certificate_order(request)
+                validate_tea_resp(response)
+
+                body = response.body
+                if body.total_count is None:
+                    raise ValueError("Certificate list is missing TotalCount")
+                entries = body.certificate_order_list or []
+                if not entries and len(seen_ids) < body.total_count:
+                    raise ValueError("Certificate list ended before TotalCount")
+                for certificate in entries:
+                    cert_id = certificate.certificate_id
+                    if not cert_id or cert_id in seen_ids:
+                        raise ValueError("Certificate list has missing or repeated IDs")
+                    seen_ids.add(cert_id)
+                    certificates[cert_id] = certificate
+                if len(seen_ids) >= body.total_count:
+                    break
+                page += 1
+
+        return list(certificates.values())
+
+    # https://help.aliyun.com/zh/ssl-certificate/developer-reference/api-cas-2020-04-07-getusercertificatedetail
+    def get_cert(self, cert_id: int) -> cas_models.GetUserCertificateDetailResponseBody:
+        config = self.get_base_config()
+        config.endpoint = "cas.aliyuncs.com"
+        client = casClient(config)
+        request = cas_models.GetUserCertificateDetailRequest(
+            cert_id=cert_id, cert_filter=True
         )
-        response = client.list_user_certificate_order(request)
-
+        response = client.get_user_certificate_detail(request)
         validate_tea_resp(response)
-
-        return response.body.certificate_order_list
+        return response.body
 
     # https://help.aliyun.com/zh/ssl-certificate/developer-reference/api-cas-2020-04-07-uploadusercertificate
     def upload_cert(self, cert_name: str, cert: str, key: str) -> int64:
@@ -56,6 +89,11 @@ class AliApi:
             name=cert_name,  # 字母数字下划线中划线
             cert=cert,  # PEM 格式证书内容
             key=key,  # PEM 格式证书的私钥内容
+            tags=[
+                cas_models.UploadUserCertificateRequestTags(
+                    key="managed-by", value="acme.sh"
+                )
+            ],
         )
         response = client.upload_user_certificate(request)
 
