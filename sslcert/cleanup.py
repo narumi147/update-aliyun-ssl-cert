@@ -2,7 +2,7 @@
 
 import re
 
-from .ali_api import AliApi
+from .ali_api import AliApi, UploadedCertificate
 from .logger import logger
 
 
@@ -29,21 +29,37 @@ def _belongs_to_domain(name: str, root: str) -> bool:
     return name == root or name.endswith("." + root)
 
 
+def _common_name_matches_root(common_name: str | None, root: str) -> bool:
+    if not common_name:
+        return False
+    try:
+        return _belongs_to_domain(_normalize_domain(common_name), root)
+    except ValueError:
+        return False
+
+
 def cleanup_old_certificates(api: AliApi, domain: str, current_cert_id: int) -> None:
     """Cleanup errors are warnings and must not change a successful deployment."""
     try:
         root = _normalize_domain(domain).removeprefix("*.")
-        certificates = api.list_cert()
+        certificates: list[UploadedCertificate] = api.list_cert()
     except Exception as error:  # noqa: BLE001
         logger.warning(f"Skipping certificate cleanup for {domain}: {error}")
         return
 
+    # Only CommonName is used here; the full SAN list is checked in the loop.
+    scoped_certificates: list[UploadedCertificate] = [
+        certificate
+        for certificate in certificates
+        if _common_name_matches_root(certificate.common_name, root)
+    ]
+
     # Fetch the new SAN list only when a valid old certificate needs comparison.
-    current_domains = None
-    current_domains_failed = False
-    deleted_count = 0
-    for certificate in certificates:
-        cert_id = certificate.certificate_id
+    current_domains: set[str] | None = None
+    current_domains_failed: bool = False
+    deleted_count: int = 0
+    for certificate in scoped_certificates:
+        cert_id: int | None = certificate.certificate_id
         if cert_id == current_cert_id:
             continue
         if not cert_id:
@@ -51,11 +67,10 @@ def cleanup_old_certificates(api: AliApi, domain: str, current_cert_id: int) -> 
             continue
 
         try:
-            domains = _certificate_domains(certificate.sans)
+            domains: set[str] = _certificate_domains(certificate.sans)
         except ValueError as error:
             logger.warning(f"Skipping cert {cert_id}: {error}")
             continue
-
         if not all(_belongs_to_domain(name, root) for name in domains):
             logger.info(f"Keeping cert {cert_id}: domains outside {root}")
             continue

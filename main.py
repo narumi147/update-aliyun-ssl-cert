@@ -15,7 +15,7 @@ from sslcert.logger import logger
 from sslcert.settings import Config, settings
 
 
-def main(config_fp: Path, delete_old_cert: bool):
+def main(config_fp: Path, delete_old_cert: bool) -> int:
     config = Config.model_validate_json(config_fp.read_bytes())
 
     Le_Domain = settings.Le_Domain or config.Le_Domain
@@ -60,22 +60,33 @@ def main(config_fp: Path, delete_old_cert: bool):
     )
     logger.info(f'Uploaded cert "{cert_name}" with ID {cert_id}')
 
-    # update CDN/DCDN cert
-    for domain in domain_config.CDN_DOMAINS:
-        ali_api.set_cdn_cert(domain_name=domain, cert_id=cert_id, cert_name=cert_name)
-        logger.info(f'Set CDN cert for "{domain}": {cert_id} {cert_name}')
+    failed_domains = []
+    for product, domains, set_cert in (
+        ("CDN", domain_config.CDN_DOMAINS, ali_api.set_cdn_cert),
+        ("DCDN", domain_config.DCDN_DOMAINS, ali_api.set_dcdn_cert),
+    ):
+        for domain in domains:
+            try:
+                set_cert(domain_name=domain, cert_id=cert_id, cert_name=cert_name)
+            except Exception as error:  # noqa: BLE001 - Continue with other domains.
+                logger.error(f'Failed to set {product} cert for "{domain}": {error}')
+                failed_domains.append(f"{product}:{domain}")
+                continue
+            logger.info(f'Set {product} cert for "{domain}": {cert_id} {cert_name}')
 
-    for domain in domain_config.DCDN_DOMAINS:
-        ali_api.set_dcdn_cert(domain_name=domain, cert_id=cert_id, cert_name=cert_name)
-        logger.info(f'Set DCDN cert for "{domain}": {cert_id} {cert_name}')
-
+    if failed_domains:
+        logger.error(
+            f"Certificate deployment completed with {len(failed_domains)} failures: "
+            + ", ".join(failed_domains)
+        )
     if delete_old_cert:
         try:
             cleanup_old_certificates(ali_api, Le_Domain, cert_id)
         except Exception as error:  # noqa: BLE001 - Cleanup is explicitly best-effort.
             logger.warning(
-                f"Certificate cleanup failed after successful deployment: {error}"
+                f"Certificate cleanup failed after deployment attempts: {error}"
             )
+    return 1 if failed_domains else 0
 
 
 if __name__ == "__main__":
@@ -98,4 +109,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    main(Path(args.config), args.delete_old_cert)
+    raise SystemExit(main(Path(args.config), args.delete_old_cert))

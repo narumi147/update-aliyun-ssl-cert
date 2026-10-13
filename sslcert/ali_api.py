@@ -9,6 +9,7 @@ from alibabacloud_tea_openapi import models as open_api_models
 from .utils import print_aliapi_params, validate_tea_resp
 
 int64 = int
+type UploadedCertificate = cas_models.ListUserCertificateOrderResponseBodyCertificateOrderList
 
 casClient.call_api = print_aliapi_params(casClient.call_api)
 cdnClient.call_api = print_aliapi_params(cdnClient.call_api)
@@ -20,25 +21,23 @@ class AliApi:
         self.key_id = key_id
         self.key_secret = key_secret
 
-    def get_base_config(self):
+    def get_base_config(self) -> open_api_models.Config:
         return open_api_models.Config(
             access_key_id=self.key_id,
             access_key_secret=self.key_secret,
         )
 
     # https://help.aliyun.com/zh/ssl-certificate/developer-reference/api-cas-2020-04-07-listusercertificateorder
-    def list_cert(
-        self,
-    ) -> list[cas_models.ListUserCertificateOrderResponseBodyCertificateOrderList]:
+    def list_cert(self) -> list[UploadedCertificate]:
         config = self.get_base_config()
         config.endpoint = "cas.aliyuncs.com"
         client = casClient(config)
 
-        certificates = {}
+        certificates: dict[int, UploadedCertificate] = {}
         # An empty Status returns valid certificates only; query expired ones too.
         for status in (None, "EXPIRED"):
             page = 1
-            seen_ids = set()
+            seen_ids: set[int] = set()
             while True:
                 request = cas_models.ListUserCertificateOrderRequest(
                     order_type="UPLOAD", status=status, current_page=page, show_size=100

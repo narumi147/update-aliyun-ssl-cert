@@ -64,6 +64,12 @@ poetry export --without-hashes -f requirements.txt -o requirements.txt
 
 本项目不会自动读取内置插件的 `SAVED_DEPLOY_*` 配置或 AccessKey，需在 `config.json` 中设置。该文件已被 `.gitignore` 排除。
 
+### 泛域名加速的写法
+
+`CDN_DOMAINS` / `DCDN_DOMAINS` 填写的是阿里云已接入的加速域名名称，脚本会原样传给部署接口。例如控制台中的泛域名为 `.srv.tsupolymer.com`，则配置填写 `.srv.tsupolymer.com`；证书自身的 SAN 则应包含 `*.srv.tsupolymer.com`。加速域名标识与证书 SAN 使用不同写法，清理时比较的是证书 SAN。
+
+阿里云的 [DCDN 域名接口](https://help.aliyun.com/zh/edge-security-acceleration/dcdn/developer-reference/api-dcdn-2018-01-15-adddcdndomain) 使用点号开头的泛域名表示；[acme.sh 阿里云部署说明](https://github.com/acmesh-official/acme.sh/wiki/deployhooks#35-deploy-your-certificate-to-cdn-or-dcdn-of-alibaba-cloud-aliyun) 也使用 `.example.com` 作为部署目标。建议按控制台或域名查询 API 返回的名称填写，而不是用证书的 `*.example.com` 替换部署目标。
+
 ## 自定义 deploy-hook
 
 ### 安装适配脚本
@@ -153,15 +159,17 @@ acme.sh --deploy -d chaldea.center --ecc --deploy-hook aliyun_custom
 
 ### 旧证书清理规则
 
-Python CLI 的 `--delete-old-cert` 默认关闭；仓库提供的 `aliyun_custom.sh` 会显式开启它。全部配置域名的部署调用成功后，才查询并清理旧证书。清理规则如下：
+Python CLI 的 `--delete-old-cert` 默认关闭；仓库提供的 `aliyun_custom.sh` 会显式开启它。全部配置域名的部署调用尝试结束后，查询并清理旧证书；部分域名部署失败也会执行清理。清理规则如下：
 
 1. 查询全部分页的有效及过期上传证书，始终保留本次上传的证书 ID。
-2. 以本次 `Le_Domain` 为域名范围，不自动推断公共后缀。例如 `chaldea.center` 包括自身和其所有子域名；旧证书全部 SAN 域名都必须属于该范围，跨根域名证书保留，即使已过期。
+2. 首先仅以 `CommonName` 判断是否属于本次 `Le_Domain` 或其子域名，不自动推断公共后缀；例如 `*.atlas.chaldea.center` 属于 `chaldea.center` 的范围。范围外、缺失或无效的 `CommonName` 静默跳过。随后在循环内检查完整 `Sans`，全部 SAN 域名都必须属于该范围；跨根域名证书保留，即使已过期。
 3. 范围内的过期证书删除，不要求其 SAN 是新证书的子集。
 4. 范围内的未过期证书，仅在 SAN 域名集合为新证书 SAN 域名集合的子集时删除。比较忽略域名大小写和单个末尾句点；按域名项比较，不展开通配符。旧证书的 `api.chaldea.center` 不等同于新证书的 `*.chaldea.center`。
 5. 不检查标签或上传来源，可以删除内置 hook、其他工具或人工上传的多张证书；不查询 CDN/DCDN 或其他云产品的引用关系。
 
-SAN 信息无效或缺失、过期状态未知的候选会跳过。完整列表查询失败时跳过本次清理；新证书 SAN 查询失败时保留未过期候选，已过期候选仍按上述范围规则处理。单张删除失败记 WARNING 并继续处理其他证书，清理错误不改变已成功部署的退出码。上传或配置域名部署失败仍返回非零退出码，并且不执行清理。
+SAN 信息无效或缺失、过期状态未知的候选会跳过。完整列表查询失败时跳过本次清理；新证书 SAN 查询失败时保留未过期候选，已过期候选仍按上述范围规则处理。单张删除失败记 WARNING 并继续处理其他证书，清理错误不改变已成功部署的退出码。
+
+单个 CDN/DCDN 域名部署失败时，记录包含产品、域名和接口错误的 ERROR，继续处理其余域名。全部域名处理结束后汇总失败项，并在开启 `--delete-old-cert` 时继续清理旧证书；存在部署失败时，脚本在清理结束后返回退出码 1。上传失败仍直接终止并返回非零退出码；全部域名部署成功则返回 0，清理警告不改变该结果。失败域名可能仍使用旧证书，清理不会额外检查其引用关系。
 
 因此，清理成功不表示所有云产品都已停止使用旧证书。核对清理日志中的实际删除及跳过结果；要只上传和部署，可以直接运行不带 `--delete-old-cert` 的 Python 命令。
 
